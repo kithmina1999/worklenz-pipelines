@@ -9,6 +9,7 @@
     "dev-build": "vite build",
     "serve": "vite preview",
     "format": "prettier --write ."
+
   },
   "dependencies": {
     "@ant-design/colors": "^7.1.0",
