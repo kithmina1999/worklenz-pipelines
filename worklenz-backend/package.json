@@ -21,7 +21,9 @@
     "sonar": "sonar-scanner -Dproject.settings=sonar-project-dev.properties",
     "tsc": "tsc",
     "test": "jest --setupFiles dotenv/config",
-    "test:watch": "jest --watch --setupFiles dotenv/config"
+    "test:watch": "jest --watch --setupFiles dotenv/config",
+    "lint": "eslint . --ext .ts"
+
   },
   "jestSonar": {
     "reportPath": "coverage",
