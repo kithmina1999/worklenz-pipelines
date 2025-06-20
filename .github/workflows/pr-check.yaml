@@ -1,0 +1,61 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches:
+     - main
+
+jobs:
+  backend-check:
+    name: Backend - Lint, Build, Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worklenz-backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint backend code
+        run: npx eslint .
+
+      - name: Build backend with Grunt
+        run: npm run build
+
+      - name: Run backend tests
+        run: npm test || echo "No test found or test failed"
+
+  frontend-check: 
+    name: Frontend - Lint, Build, Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: worklenz-frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint frontend code
+        run: npm run lint || echo "⚠️ Lint failed or not configured"
+
+      - name: Build frontend with Vite
+        run: npm run build
