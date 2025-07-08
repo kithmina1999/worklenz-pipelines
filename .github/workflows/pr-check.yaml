@@ -64,6 +64,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install utilities
+        run: sudo apt-get update && sudo apt-get install -y lsof curl netcat
+
+      - name: Make update script executable
+        run: chmod +x ./update-docker-env.sh
+
+      - name: Run update-docker-env.sh to generate env files
+        run: ./update-docker-env.sh localhost false
+
+
       - name: Set up Docker Compose and start containers
         run: docker compose -f docker-compose.yml up -d --build
 
