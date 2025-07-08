@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install utilities
-        run: sudo apt-get update && sudo apt-get install -y lsof curl netcat
+        run: sudo apt-get update && sudo apt-get install -y lsof curl netcat-openbsd
 
       - name: Make update script executable
         run: chmod +x ./update-docker-env.sh
