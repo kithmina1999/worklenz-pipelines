@@ -3,59 +3,99 @@ name: PR Check
 on:
   pull_request:
     branches:
-     - main
+      - main
 
 jobs:
   backend-check:
-    name: Backend - Lint, Build, Test
+    name: Backend – Lint, Build, Test
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: worklenz-backend
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
+      - run: npm ci
+      - name: Lint backend
+        run: npx eslint . || { echo '⚠️ Lint errors'; exit 1; }
+      - name: Build backend
+        run: npm run build || { echo '❌ Build failed'; exit 1; }
+      - name: Test backend
+        run: |
+          if npm test -- --watchAll=false --passWithNoTests; then
+            echo "✅ Backend tests passed or none found"
+          else
+            echo "❌ Backend tests failed"
+            exit 1
+          fi
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint backend code
-        run: npx eslint . || echo "⚠️ Lint failed or not configured"
-
-      - name: Build backend with Grunt
-        run: npm run build
-
-      - name: Run backend tests
-        run: npm test || echo "No test found or test failed"
-
-  frontend-check: 
-    name: Frontend - Lint, Build, Test
+  frontend-check:
+    name: Frontend – Lint, Build, Test
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: worklenz-frontend
-
     steps:
-      - name: Checkout code
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Lint frontend
+        run: npm run lint || { echo '⚠️ Lint errors'; exit 1; }
+      - name: Build frontend
+        run: npm run build || { echo '❌ Build failed'; exit 1; }
+      - name: Test frontend
+        run: |
+          if npm test -- --watchAll=false --passWithNoTests; then
+            echo "✅ Frontend tests passed or none found"
+          else
+            echo "❌ Frontend tests failed"
+            exit 1
+          fi
+
+  smoke-test:
+    name: Docker Compose Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Set up Docker Compose and start containers
+        run: docker compose -f docker-compose.yml up -d --build
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Wait for backend to respond
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:3000/health; then
+              echo "✅ Backend is up"
+              break
+            fi
+            echo "Waiting for backend..."
+            sleep 5
+          done
 
-      - name: Lint frontend code
-        run: npm run lint || echo "⚠️ Lint failed or not configured"
+      - name: Wait for frontend to respond
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:5000; then
+              echo "✅ Frontend is up"
+              break
+            fi
+            echo "Waiting for frontend..."
+            sleep 5
+          done
 
-      - name: Build frontend with Vite
-        run: npm run build
+      - name: Check MinIO Console
+        run: curl -sSf http://localhost:9001 || echo "⚠️ MinIO Console not responding"
+
+      - name: Check PostgreSQL Port
+        run: |
+          nc -zv localhost 5432 && echo "✅ PostgreSQL is reachable" || (echo "❌ PostgreSQL unreachable" && exit 1)
+
+      - name: Tear down Docker Compose
+        if: always()
+        run: docker compose -f docker-compose.yml down
