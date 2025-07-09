@@ -103,8 +103,22 @@ jobs:
       - name: Check MinIO Console
         run: curl -sSf http://localhost:9001 || echo "⚠️ MinIO Console not responding"
 
-      - name: Wait for PostgreSQL (inside Docker)
-        run: docker compose exec -T worklenz_db pg_isready -U postgres
+      - name: Wait for PostgreSQL to become healthy
+        run: |
+          for i in $(seq 1 10); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q worklenz_db))
+            echo "Postgres status: $status"
+            if [ "$status" = "healthy" ]; then
+              echo "✅ PostgreSQL is healthy"
+              exit 0
+            fi
+            echo "⏳ Waiting for PostgreSQL to become healthy..."
+            sleep 5
+          done
+          echo "❌ PostgreSQL did not become healthy"
+          docker compose logs worklenz_db
+          exit 1
+
 
 
       - name: Tear down Docker Compose
