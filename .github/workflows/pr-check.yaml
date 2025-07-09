@@ -3,59 +3,141 @@ name: PR Check
 on:
   pull_request:
     branches:
-     - main
+      - main
 
 jobs:
   backend-check:
-    name: Backend - Lint, Build, Test
+    name: Backend – Lint, Build, Test
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: worklenz-backend
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
+      - run: npm ci
+      - name: Lint backend
+        run:  npx eslint . || echo "⚠️ Lint errors"
+      - name: Build backend
+        run: npm run build || { echo '❌ Build failed'; exit 1; }
+      - name: Test backend
+        run: |
+          if npm test -- --watchAll=false --passWithNoTests; then
+            echo "✅ Backend tests passed or none found"
+          else
+            echo "❌ Backend tests failed"
+            exit 1
+          fi
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint backend code
-        run: npx eslint . || echo "⚠️ Lint failed or not configured"
-
-      - name: Build backend with Grunt
-        run: npm run build
-
-      - name: Run backend tests
-        run: npm test || echo "No test found or test failed"
-
-  frontend-check: 
-    name: Frontend - Lint, Build, Test
+  frontend-check:
+    name: Frontend – Lint, Build, Test
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: worklenz-frontend
-
     steps:
-      - name: Checkout code
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Lint frontend
+        run: npm run lint ||  echo '⚠️ Lint errors' 
+      - name: Build frontend
+        run: npm run build || { echo '❌ Build failed'; exit 1; }
+      - name: Test frontend
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.test' package.json > /dev/null; then
+            if find src -type f \( -name "*.test.js" -o -name "*.test.ts" -o -name "*.spec.js" -o -name "*.spec.ts" \) | grep -q .; then
+              echo "🧪 Test files found. Running tests..."
+              npm test -- --watchAll=false || { echo "❌ Tests failed"; exit 1; }
+            else
+              echo "⚠️ No test files found. Skipping tests."
+            fi
+          else
+            echo "⚠️ No test script found in package.json. Skipping tests."
+          fi
+
+
+
+  smoke-test:
+    name: Docker Compose Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Install utilities
+        run: sudo apt-get update && sudo apt-get install -y lsof curl netcat-openbsd
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Make update script executable
+        run: chmod +x ./update-docker-env.sh
 
-      - name: Lint frontend code
-        run: npm run lint || echo "⚠️ Lint failed or not configured"
+      - name: Run update-docker-env.sh to generate env files
+        run: ./update-docker-env.sh localhost false
 
-      - name: Build frontend with Vite
-        run: npm run build
+
+      - name: Set up Docker Compose and start containers
+        run: docker compose -f docker-compose.yml up -d --build
+
+      - name: Wait for backend to respond
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:3000/health; then
+              echo "✅ Backend is up"
+              break
+            fi
+            echo "Waiting for backend..."
+            sleep 5
+          done
+
+      - name: Wait for frontend to respond
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:5000; then
+              echo "✅ Frontend is up"
+              break
+            fi
+            echo "Waiting for frontend..."
+            sleep 5
+          done
+
+      - name: Check MinIO Console
+        run: curl -sSf http://localhost:9001 || echo "⚠️ MinIO Console not responding"
+
+      - name: Wait for PostgreSQL to become healthy
+        run: |
+          for i in $(seq 1 10); do
+            container_id=$(docker ps -qf "name=worklenz_db")
+            if [ -z "$container_id" ]; then
+              echo "⏳ worklenz_db container not found yet"
+              sleep 5
+              continue
+            fi
+
+            status=$(docker inspect --format='{{.State.Health.Status}}' "$container_id")
+            echo "Postgres health: $status"
+
+            if [ "$status" = "healthy" ]; then
+              echo "✅ PostgreSQL is healthy"
+              exit 0
+            fi
+
+            echo "⏳ Waiting for PostgreSQL..."
+            sleep 5
+          done
+
+          echo "❌ PostgreSQL did not become healthy"
+          docker logs $(docker ps -qf "name=worklenz_db")
+          exit 1
+
+
+
+
+      - name: Tear down Docker Compose
+        if: always()
+        run: docker compose -f docker-compose.yml down
+  
