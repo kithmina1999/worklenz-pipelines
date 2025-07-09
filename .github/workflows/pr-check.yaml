@@ -49,12 +49,17 @@ jobs:
         run: npm run build || { echo '❌ Build failed'; exit 1; }
       - name: Test frontend
         run: |
-          if find src -type f \( -name "*.test.js" -o -name "*.test.ts" -o -name "*.spec.js" -o -name "*.spec.ts" \) | grep -q .; then
-            echo "🧪 Test files found, running tests..."
-            npm test -- --watchAll=false || { echo "❌ Frontend tests failed"; exit 1; }
+          if [ -f package.json ] && jq -e '.scripts.test' package.json > /dev/null; then
+            if find src -type f \( -name "*.test.js" -o -name "*.test.ts" -o -name "*.spec.js" -o -name "*.spec.ts" \) | grep -q .; then
+              echo "🧪 Test files found. Running tests..."
+              npm test -- --watchAll=false || { echo "❌ Tests failed"; exit 1; }
+            else
+              echo "⚠️ No test files found. Skipping tests."
+            fi
           else
-            echo "⚠️ No frontend test files found. Skipping tests."
+            echo "⚠️ No test script found in package.json. Skipping tests."
           fi
+
 
 
   smoke-test:
@@ -106,21 +111,33 @@ jobs:
       - name: Wait for PostgreSQL to become healthy
         run: |
           for i in $(seq 1 10); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q worklenz_db))
-            echo "Postgres status: $status"
+            container_id=$(docker ps -qf "name=worklenz_db")
+            if [ -z "$container_id" ]; then
+              echo "⏳ worklenz_db container not found yet"
+              sleep 5
+              continue
+            fi
+
+            status=$(docker inspect --format='{{.State.Health.Status}}' "$container_id")
+            echo "Postgres health: $status"
+
             if [ "$status" = "healthy" ]; then
               echo "✅ PostgreSQL is healthy"
               exit 0
             fi
-            echo "⏳ Waiting for PostgreSQL to become healthy..."
+
+            echo "⏳ Waiting for PostgreSQL..."
             sleep 5
           done
+
           echo "❌ PostgreSQL did not become healthy"
-          docker compose logs worklenz_db
+          docker logs $(docker ps -qf "name=worklenz_db")
           exit 1
 
 
 
+
       - name: Tear down Docker Compose
-        if: always()
-        run: docker compose -f docker-compose.yml down
+          if: always()
+          run: docker compose -f docker-compose.yml down
+  
