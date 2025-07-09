@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      - name: Security audit
+        working-directory: worklenz-backend
+        run: npm audit --audit-level=high || echo "⚠️ Vulnerabilities found"
+      
       - name: Lint backend
         run:  npx eslint . || echo "⚠️ Lint errors"
       - name: Build backend
@@ -43,6 +47,9 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
+      - name: Security audit
+        working-directory: worklenz-frontend
+        run: npm audit --audit-level=high || echo "⚠️ Vulnerabilities found"
       - name: Lint frontend
         run: npm run lint ||  echo '⚠️ Lint errors' 
       - name: Build frontend
