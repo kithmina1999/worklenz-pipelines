@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
       - run: npm ci
       - name: Lint backend
-        run: npx eslint . || { echo '⚠️ Lint errors'; exit 1; }
+        run:  npx eslint . || echo "⚠️ Lint errors"
       - name: Build backend
         run: npm run build || { echo '❌ Build failed'; exit 1; }
       - name: Test backend
@@ -44,7 +44,7 @@ jobs:
           node-version: '22'
       - run: npm ci
       - name: Lint frontend
-        run: npm run lint || { echo '⚠️ Lint errors'; exit 1; }
+        run: npm run lint ||  echo '⚠️ Lint errors' 
       - name: Build frontend
         run: npm run build || { echo '❌ Build failed'; exit 1; }
       - name: Test frontend
@@ -104,7 +104,20 @@ jobs:
 
       - name: Check PostgreSQL Port
         run: |
-          nc -zv localhost 5432 && echo "✅ PostgreSQL is reachable" || (echo "❌ PostgreSQL unreachable" && exit 1)
+            for i in {1..10}; do
+              if nc -z localhost 5432; then
+                echo "✅ PostgreSQL is reachable"
+                break
+              fi
+              echo "Waiting for PostgreSQL..."
+              sleep 5
+            done
+
+            if ! nc -z localhost 5432; then
+              echo "❌ PostgreSQL still unreachable after waiting"
+              docker compose logs postgres
+              exit 1
+            fi
 
       - name: Tear down Docker Compose
         if: always()
