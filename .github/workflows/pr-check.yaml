@@ -138,6 +138,6 @@ jobs:
 
 
       - name: Tear down Docker Compose
-          if: always()
-          run: docker compose -f docker-compose.yml down
+        if: always()
+        run: docker compose -f docker-compose.yml down
   
