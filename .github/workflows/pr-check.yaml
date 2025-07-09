@@ -49,12 +49,13 @@ jobs:
         run: npm run build || { echo '❌ Build failed'; exit 1; }
       - name: Test frontend
         run: |
-          if npm test -- --watchAll=false --passWithNoTests; then
-            echo "✅ Frontend tests passed or none found"
+          if find src -type f \( -name "*.test.js" -o -name "*.test.ts" -o -name "*.spec.js" -o -name "*.spec.ts" \) | grep -q .; then
+            echo "🧪 Test files found, running tests..."
+            npm test -- --watchAll=false || { echo "❌ Frontend tests failed"; exit 1; }
           else
-            echo "❌ Frontend tests failed"
-            exit 1
+            echo "⚠️ No frontend test files found. Skipping tests."
           fi
+
 
   smoke-test:
     name: Docker Compose Smoke Test
@@ -102,22 +103,9 @@ jobs:
       - name: Check MinIO Console
         run: curl -sSf http://localhost:9001 || echo "⚠️ MinIO Console not responding"
 
-      - name: Check PostgreSQL Port
-        run: |
-            for i in {1..10}; do
-              if nc -z localhost 5432; then
-                echo "✅ PostgreSQL is reachable"
-                break
-              fi
-              echo "Waiting for PostgreSQL..."
-              sleep 5
-            done
+      - name: Wait for PostgreSQL (inside Docker)
+        run: docker compose exec -T worklenz_db pg_isready -U postgres
 
-            if ! nc -z localhost 5432; then
-              echo "❌ PostgreSQL still unreachable after waiting"
-              docker compose logs postgres
-              exit 1
-            fi
 
       - name: Tear down Docker Compose
         if: always()
